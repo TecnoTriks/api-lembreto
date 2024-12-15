@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "nodemon src/app.js",
     "start": "node src/app.js",
-    "vercel-build": "echo 'Build step completed'"
+    "build": "echo \"No build step needed\"",
+    "vercel-build": "echo \"Vercel build completed\""
   },
   "keywords": [],
   "author": "",
