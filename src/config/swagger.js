@@ -6,17 +6,19 @@ const options = {
     info: {
       title: 'API Lembreto',
       version: '1.0.0',
-      description: 'API de gerenciamento de lembretes',
+      description: 'API para gerenciamento de lembretes com notificações via WhatsApp',
     },
     servers: [
       {
-        url: 'http://localhost:3000',
-        description: 'Development server',
+        url: process.env.NODE_ENV === 'production' 
+          ? 'https://api-lembreto.vercel.app'
+          : 'http://localhost:3000',
+        description: process.env.NODE_ENV === 'production' ? 'Servidor de Produção' : 'Servidor Local',
       },
     ],
     components: {
       securitySchemes: {
-        bearerAuth: {
+        BearerAuth: {
           type: 'http',
           scheme: 'bearer',
           bearerFormat: 'JWT',
@@ -24,10 +26,12 @@ const options = {
       },
     },
     security: [{
-      bearerAuth: [],
+      BearerAuth: [],
     }],
   },
-  apis: ['./src/routes/*.js'],
+  apis: ['./src/routes/*.js'], // Caminho para os arquivos com anotações Swagger
 };
 
-module.exports = swaggerJsdoc(options);
+const swaggerSpec = swaggerJsdoc(options);
+
+module.exports = swaggerSpec;

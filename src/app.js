@@ -2,6 +2,7 @@ const express = require('express');
 const swaggerUi = require('swagger-ui-express');
 const cors = require('cors');
 const helmet = require('helmet');
+const path = require('path');
 require('dotenv').config();
 
 const swaggerSpec = require('./config/swagger');
@@ -18,9 +19,17 @@ const app = express();
 
 // Middlewares de segurança
 app.use(helmet({
-  contentSecurityPolicy: false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+    },
+  },
   crossOriginEmbedderPolicy: false
 }));
+
 app.use(cors());
 app.use(express.json());
 
@@ -50,8 +59,22 @@ app.use('/api/tags', tagsRoutes);
 app.use('/api/notificacoes', notificacoesRoutes);
 app.use('/api/mensagens', mensagensRoutes);
 
+// Configuração do Swagger UI
+const swaggerUiOptions = {
+  explorer: true,
+  swaggerOptions: {
+    url: '/swagger.json'
+  }
+};
+
+// Rota para servir o arquivo swagger.json
+app.get('/swagger.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerSpec);
+});
+
 // Documentação Swagger
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerUiOptions));
 
 // Rota de verificação de saúde
 app.get('/health', (req, res) => {
