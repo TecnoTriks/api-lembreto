@@ -17,7 +17,10 @@ const mensagensRoutes = require('./routes/mensagens');
 const app = express();
 
 // Middlewares de segurança
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false
+}));
 app.use(cors());
 app.use(express.json());
 
@@ -45,7 +48,8 @@ app.get('/health', (req, res) => {
   res.json(
     successResponse(HttpStatus.OK, 'API está funcionando corretamente', {
       uptime: process.uptime(),
-      timestamp: new Date()
+      timestamp: new Date(),
+      env: process.env.NODE_ENV
     })
   );
 });
