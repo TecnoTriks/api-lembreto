@@ -7,7 +7,7 @@
     "start": "node src/app.js",
     "build": "npm install",
     "dev": "nodemon src/app.js",
-    "vercel-build": "echo hello"
+    "vercel-build": "node src/app.js"
   },
   "keywords": [],
   "author": "",
