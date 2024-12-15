@@ -1,3 +1,9 @@
 const app = require('../src/app');
 
-module.exports = app;
+// Handler para funções serverless do Vercel
+module.exports = (req, res) => {
+  // Adiciona o path original à requisição
+  req.url = req.url.replace(/^\/api/, '');
+  
+  return app(req, res);
+};

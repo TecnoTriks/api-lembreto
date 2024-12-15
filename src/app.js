@@ -60,9 +60,13 @@ app.use((req, res) => {
   );
 });
 
-const PORT = process.env.PORT || 3000;
+// Se não estiver em produção, inicia o servidor
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`Servidor rodando na porta ${PORT}`);
+    console.log(`Documentação Swagger disponível em: http://localhost:${PORT}/api-docs`);
+  });
+}
 
-app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
-  console.log(`Documentação Swagger disponível em: http://localhost:${PORT}/api-docs`);
-});
+module.exports = app;
