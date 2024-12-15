@@ -67,9 +67,13 @@ app.use((req, res) => {
 // Se não estiver em produção, inicia o servidor
 if (process.env.NODE_ENV !== 'production') {
   const PORT = process.env.PORT || 3000;
+  const baseUrl = process.env.NODE_ENV === 'production' 
+    ? 'https://api-lembreto.vercel.app'
+    : `http://localhost:${PORT}`;
+    
   app.listen(PORT, () => {
     console.log(`Servidor rodando na porta ${PORT}`);
-    console.log(`Documentação Swagger disponível em: http://localhost:${PORT}/api-docs`);
+    console.log(`Documentação Swagger disponível em: ${baseUrl}/api-docs`);
   });
 }
 
