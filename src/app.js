@@ -33,6 +33,16 @@ app.use((req, res, next) => {
   next();
 });
 
+// Rota raiz
+app.get('/', (req, res) => {
+  res.json(
+    successResponse(HttpStatus.OK, 'Bem-vindo à API Lembreto', {
+      docs: '/api-docs',
+      health: '/health'
+    })
+  );
+});
+
 // Rotas da API
 app.use('/api/usuarios', usuariosRoutes);
 app.use('/api/lembretes', lembretesRoutes);
