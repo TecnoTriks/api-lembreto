@@ -1,5 +1,4 @@
 const express = require('express');
-const swaggerUi = require('swagger-ui-express');
 const cors = require('cors');
 const helmet = require('helmet');
 const path = require('path');
@@ -60,19 +59,51 @@ app.use('/api/tags', tagsRoutes);
 app.use('/api/notificacoes', notificacoesRoutes);
 app.use('/api/mensagens', mensagensRoutes);
 
-// Configuração do Swagger UI
-const swaggerUiOptions = {
-  customCss: '.swagger-ui .topbar { display: none }',
-  customSiteTitle: "API Lembreto - Documentação",
-  swaggerOptions: {
-    persistAuthorization: true,
-    displayRequestDuration: true
-  }
-};
-
 // Documentação Swagger
-app.use('/api-docs', swaggerUi.serve);
-app.get('/api-docs', swaggerUi.setup(swaggerSpec, swaggerUiOptions));
+app.get('/api-docs', (req, res) => {
+  res.send(`
+    <!-- HTML for static distribution bundle build -->
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <title>API Lembreto - Documentação</title>
+      <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.9.0/swagger-ui.css" />
+      <link rel="icon" type="image/png" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.9.0/favicon-32x32.png" sizes="32x32" />
+      <style>
+        html { box-sizing: border-box; overflow: -moz-scrollbars-vertical; overflow-y: scroll; }
+        *, *:before, *:after { box-sizing: inherit; }
+        body { margin: 0; background: #fafafa; }
+        .topbar { display: none; }
+      </style>
+    </head>
+    <body>
+      <div id="swagger-ui"></div>
+      <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.9.0/swagger-ui-bundle.js"> </script>
+      <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.9.0/swagger-ui-standalone-preset.js"> </script>
+      <script>
+        window.onload = function() {
+          const ui = SwaggerUIBundle({
+            spec: ${JSON.stringify(swaggerSpec)},
+            dom_id: '#swagger-ui',
+            deepLinking: true,
+            presets: [
+              SwaggerUIBundle.presets.apis,
+              SwaggerUIStandalonePreset
+            ],
+            plugins: [
+              SwaggerUIBundle.plugins.DownloadUrl
+            ],
+            layout: "StandaloneLayout",
+            persistAuthorization: true
+          });
+          window.ui = ui;
+        }
+      </script>
+    </body>
+    </html>
+  `);
+});
 
 // Rota de verificação de saúde
 app.get('/health', (req, res) => {
