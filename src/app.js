@@ -17,28 +17,29 @@ const mensagensRoutes = require('./routes/mensagens');
 
 const app = express();
 
-// Middlewares de segurança
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "https:"],
-    },
-  },
-  crossOriginEmbedderPolicy: false
-}));
-
+// Configuração CORS
 app.use(cors());
 app.use(express.json());
+
+// Configuração do Helmet com CSP ajustado
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false
+  })
+);
 
 // Headers de segurança adicionais
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-XSS-Protection', '1; mode=block');
-  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  next();
+});
+
+// Configuração específica para o Swagger UI
+app.use('/api-docs', (req, res, next) => {
+  res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval'; img-src * data: blob: 'unsafe-inline'");
   next();
 });
 
@@ -61,20 +62,17 @@ app.use('/api/mensagens', mensagensRoutes);
 
 // Configuração do Swagger UI
 const swaggerUiOptions = {
-  explorer: true,
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: "API Lembreto - Documentação",
   swaggerOptions: {
-    url: '/swagger.json'
+    persistAuthorization: true,
+    displayRequestDuration: true
   }
 };
 
-// Rota para servir o arquivo swagger.json
-app.get('/swagger.json', (req, res) => {
-  res.setHeader('Content-Type', 'application/json');
-  res.send(swaggerSpec);
-});
-
 // Documentação Swagger
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerUiOptions));
+app.use('/api-docs', swaggerUi.serve);
+app.get('/api-docs', swaggerUi.setup(swaggerSpec, swaggerUiOptions));
 
 // Rota de verificação de saúde
 app.get('/health', (req, res) => {
