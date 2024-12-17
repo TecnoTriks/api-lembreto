@@ -250,7 +250,10 @@ router.delete('/:id', auth, async (req, res, next) => {
  *         description: Tags associadas com sucesso
  */
 router.post('/lembrete/:lembreteId', auth, async (req, res, next) => {
+  const connection = await pool.getConnection();
   try {
+    await connection.beginTransaction();
+
     const { lembreteId } = req.params;
     const { tagIds } = req.body;
 
@@ -262,7 +265,7 @@ router.post('/lembrete/:lembreteId', auth, async (req, res, next) => {
     }
 
     // Verifica se o lembrete pertence ao usuário
-    const [lembretes] = await pool.execute(
+    const [lembretes] = await connection.execute(
       'SELECT id FROM lembretes WHERE id = ? AND usuario_id = ?',
       [lembreteId, req.user.userId]
     );
@@ -275,7 +278,7 @@ router.post('/lembrete/:lembreteId', auth, async (req, res, next) => {
     }
 
     // Verifica se todas as tags pertencem ao usuário
-    const [tags] = await pool.execute(
+    const [tags] = await connection.execute(
       'SELECT id FROM tags WHERE id IN (?) AND usuario_id = ?',
       [tagIds, req.user.userId]
     );
@@ -283,23 +286,28 @@ router.post('/lembrete/:lembreteId', auth, async (req, res, next) => {
     if (tags.length !== tagIds.length) {
       throw new AppError(
         HttpStatus.BAD_REQUEST,
-        'Uma ou mais tags não encontradas'
+        'Uma ou mais tags não encontradas ou não pertencem ao usuário'
       );
     }
 
     // Remove associações antigas
-    await pool.execute(
-      'DELETE FROM lembrete_tags WHERE lembrete_id = ?',
+    await connection.execute(
+      'DELETE FROM lembretes_tags WHERE lembrete_id = ?',
       [lembreteId]
     );
 
-    // Insere novas associações
-    for (const tagId of tagIds) {
-      await pool.execute(
-        'INSERT INTO lembrete_tags (lembrete_id, tag_id) VALUES (?, ?)',
-        [lembreteId, tagId]
-      );
-    }
+    // Prepara a query para inserção em massa
+    const values = tagIds.map(tagId => [lembreteId, tagId]);
+    const placeholders = values.map(() => '(?, ?)').join(', ');
+    const flatValues = values.flat();
+
+    // Insere todas as novas associações de uma vez
+    await connection.execute(
+      `INSERT INTO lembretes_tags (lembrete_id, tag_id) VALUES ${placeholders}`,
+      flatValues
+    );
+
+    await connection.commit();
 
     res.json(
       successResponse(
@@ -308,7 +316,10 @@ router.post('/lembrete/:lembreteId', auth, async (req, res, next) => {
       )
     );
   } catch (error) {
+    await connection.rollback();
     next(error);
+  } finally {
+    connection.release();
   }
 });
 
@@ -336,25 +347,30 @@ router.get('/lembrete/:lembreteId', auth, async (req, res, next) => {
   try {
     const { lembreteId } = req.params;
     
-    const [tags] = await pool.execute(
-      `SELECT t.* FROM tags t 
-       INNER JOIN lembretes_tags lt ON t.id = lt.tag_id 
-       INNER JOIN lembretes l ON lt.lembrete_id = l.id 
-       WHERE l.id = ? AND l.usuario_id = ?`,
+    // Primeiro verifica se o lembrete existe e pertence ao usuário
+    const [lembrete] = await pool.execute(
+      'SELECT id FROM lembretes WHERE id = ? AND usuario_id = ?',
       [lembreteId, req.user.userId]
     );
 
-    if (tags.length === 0) {
+    if (lembrete.length === 0) {
       throw new AppError(
         HttpStatus.NOT_FOUND,
-        'Nenhuma tag encontrada para este lembrete'
+        'Lembrete não encontrado'
       );
     }
+    
+    const [tags] = await pool.execute(
+      `SELECT t.* FROM tags t 
+       INNER JOIN lembretes_tags lt ON t.id = lt.tag_id 
+       WHERE lt.lembrete_id = ?`,
+      [lembreteId]
+    );
     
     res.json(
       successResponse(
         HttpStatus.OK,
-        'Tags do lembrete recuperadas com sucesso',
+        tags.length > 0 ? 'Tags do lembrete recuperadas com sucesso' : 'Nenhuma tag associada a este lembrete',
         tags
       )
     );
