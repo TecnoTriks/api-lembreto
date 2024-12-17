@@ -250,8 +250,9 @@ router.delete('/:id', auth, async (req, res, next) => {
  *         description: Tags associadas com sucesso
  */
 router.post('/lembrete/:lembreteId', auth, async (req, res, next) => {
-  const connection = await pool.getConnection();
+  let connection;
   try {
+    connection = await pool.getConnection();
     await connection.beginTransaction();
 
     const { lembreteId } = req.params;
@@ -277,10 +278,11 @@ router.post('/lembrete/:lembreteId', auth, async (req, res, next) => {
       );
     }
 
-    // Verifica se todas as tags pertencem ao usuário
+    // Verifica se todas as tags existem e pertencem ao usuário
+    const tagIdsStr = tagIds.join(',');
     const [tags] = await connection.execute(
-      'SELECT id FROM tags WHERE id IN (?) AND usuario_id = ?',
-      [tagIds, req.user.userId]
+      `SELECT id FROM tags WHERE id IN (${tagIds.map(() => '?').join(',')}) AND usuario_id = ?`,
+      [...tagIds, req.user.userId]
     );
 
     if (tags.length !== tagIds.length) {
@@ -296,16 +298,13 @@ router.post('/lembrete/:lembreteId', auth, async (req, res, next) => {
       [lembreteId]
     );
 
-    // Prepara a query para inserção em massa
-    const values = tagIds.map(tagId => [lembreteId, tagId]);
-    const placeholders = values.map(() => '(?, ?)').join(', ');
-    const flatValues = values.flat();
-
-    // Insere todas as novas associações de uma vez
-    await connection.execute(
-      `INSERT INTO lembretes_tags (lembrete_id, tag_id) VALUES ${placeholders}`,
-      flatValues
-    );
+    // Insere novas associações uma por uma para evitar problemas com placeholders
+    for (const tagId of tagIds) {
+      await connection.execute(
+        'INSERT INTO lembretes_tags (lembrete_id, tag_id) VALUES (?, ?)',
+        [lembreteId, tagId]
+      );
+    }
 
     await connection.commit();
 
@@ -316,10 +315,23 @@ router.post('/lembrete/:lembreteId', auth, async (req, res, next) => {
       )
     );
   } catch (error) {
-    await connection.rollback();
-    next(error);
+    console.error('Erro ao associar tags:', error);
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch (rollbackError) {
+        console.error('Erro ao fazer rollback:', rollbackError);
+      }
+    }
+    if (error instanceof AppError) {
+      next(error);
+    } else {
+      next(new AppError(HttpStatus.INTERNAL_SERVER_ERROR, 'Erro ao associar tags ao lembrete'));
+    }
   } finally {
-    connection.release();
+    if (connection) {
+      connection.release();
+    }
   }
 });
 
