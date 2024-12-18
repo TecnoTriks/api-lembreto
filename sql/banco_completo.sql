@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1:3306
--- Tempo de geração: 18/12/2024 às 17:33
+-- Tempo de geração: 18/12/2024 às 19:41
 -- Versão do servidor: 10.11.10-MariaDB
 -- Versão do PHP: 7.2.34
 
@@ -32,7 +32,7 @@ CREATE TABLE `lembretes` (
   `titulo` varchar(255) NOT NULL,
   `descricao` text DEFAULT NULL,
   `tipo` enum('Contas a Pagar','Saúde','Normal') NOT NULL,
-  `data_hora` datetime NOT NULL,
+  `data_hora` datetime DEFAULT NULL,
   `recorrente` tinyint(1) DEFAULT 0,
   `frequencia` enum('Diária','Semanal','Mensal','Anual') DEFAULT NULL,
   `status` enum('Ativo','Concluído','Cancelado') DEFAULT 'Ativo',
@@ -98,6 +98,13 @@ CREATE TABLE `tags` (
   `usuario_id` int(11) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+--
+-- Despejando dados para a tabela `tags`
+--
+
+INSERT INTO `tags` (`id`, `nome`, `cor`, `icone`, `usuario_id`) VALUES
+(23, 'test1', '#eab308', '😄', 12);
+
 -- --------------------------------------------------------
 
 --
@@ -115,6 +122,13 @@ CREATE TABLE `usuarios` (
   `api_key` varchar(100) DEFAULT NULL,
   `foto_perfil` varchar(255) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Despejando dados para a tabela `usuarios`
+--
+
+INSERT INTO `usuarios` (`id`, `nome`, `email`, `senha`, `telefone`, `data_criacao`, `status`, `api_key`, `foto_perfil`) VALUES
+(12, 'Matheus', 'tecnotriks@gmail.com', '$2a$10$Vn0WkX0dCMYNEAxejShHz.Fu99.BwaowTx1V57J9U5bx/Am./FNlC', '63984193411', '2024-12-18 18:15:30', 'Ativo', '1a06376f3c4369d645a7d4f487a60ffc3101f5bfce7b2f242466c3b47c023a7d', NULL);
 
 --
 -- Índices para tabelas despejadas
@@ -177,7 +191,7 @@ ALTER TABLE `usuarios`
 -- AUTO_INCREMENT de tabela `lembretes`
 --
 ALTER TABLE `lembretes`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=37;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=43;
 
 --
 -- AUTO_INCREMENT de tabela `notificacoes`
@@ -189,13 +203,13 @@ ALTER TABLE `notificacoes`
 -- AUTO_INCREMENT de tabela `tags`
 --
 ALTER TABLE `tags`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=23;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=24;
 
 --
 -- AUTO_INCREMENT de tabela `usuarios`
 --
 ALTER TABLE `usuarios`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=12;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
 
 --
 -- Restrições para tabelas despejadas

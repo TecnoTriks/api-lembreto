@@ -103,6 +103,23 @@ router.post('/', auth, async (req, res, next) => {
       mes
     } = req.body;
 
+    // Log dos dados recebidos
+    console.log('Dados recebidos:', {
+      titulo, tipo, recorrente, frequencia,
+      dia, hora, data, dia_semana, mes,
+      userId: req.user?.userId
+    });
+
+    // Validação do usuário
+    if (!req.user || !req.user.userId) {
+      throw new AppError(
+        HttpStatus.UNAUTHORIZED,
+        'Erro de autenticação',
+        { message: 'Usuário não identificado no token' }
+      );
+    }
+
+    // Validação dos campos obrigatórios
     if (!titulo || !tipo) {
       throw new AppError(
         HttpStatus.BAD_REQUEST,
@@ -111,8 +128,27 @@ router.post('/', auth, async (req, res, next) => {
       );
     }
 
-    // Validação adicional para campos recorrentes
+    // Validação do tipo
+    const tiposValidos = ['Contas a Pagar', 'Saúde', 'Normal'];
+    if (!tiposValidos.includes(tipo)) {
+      throw new AppError(
+        HttpStatus.BAD_REQUEST,
+        ApiMessages.VALIDATION_ERROR,
+        { message: `Tipo inválido. Valores aceitos: ${tiposValidos.join(', ')}` }
+      );
+    }
+
+    // Validação de recorrência
     if (recorrente && frequencia) {
+      const frequenciasValidas = ['Diária', 'Semanal', 'Mensal', 'Anual'];
+      if (!frequenciasValidas.includes(frequencia)) {
+        throw new AppError(
+          HttpStatus.BAD_REQUEST,
+          ApiMessages.VALIDATION_ERROR,
+          { message: `Frequência inválida. Valores aceitos: ${frequenciasValidas.join(', ')}` }
+        );
+      }
+
       switch (frequencia) {
         case 'Mensal':
           if (!dia || !hora) {
@@ -122,8 +158,16 @@ router.post('/', auth, async (req, res, next) => {
               { message: 'Para lembretes mensais, dia e hora são obrigatórios' }
             );
           }
+          if (dia < 1 || dia > 31) {
+            throw new AppError(
+              HttpStatus.BAD_REQUEST,
+              ApiMessages.VALIDATION_ERROR,
+              { message: 'Dia deve estar entre 1 e 31' }
+            );
+          }
           break;
         case 'Semanal':
+          const diasValidos = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
           if (!dia_semana || !hora) {
             throw new AppError(
               HttpStatus.BAD_REQUEST,
@@ -131,8 +175,16 @@ router.post('/', auth, async (req, res, next) => {
               { message: 'Para lembretes semanais, dia da semana e hora são obrigatórios' }
             );
           }
+          if (!diasValidos.includes(dia_semana)) {
+            throw new AppError(
+              HttpStatus.BAD_REQUEST,
+              ApiMessages.VALIDATION_ERROR,
+              { message: `Dia da semana inválido. Valores aceitos: ${diasValidos.join(', ')}` }
+            );
+          }
           break;
         case 'Anual':
+          const mesesValidos = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
           if (!dia || !mes || !hora) {
             throw new AppError(
               HttpStatus.BAD_REQUEST,
@@ -140,29 +192,59 @@ router.post('/', auth, async (req, res, next) => {
               { message: 'Para lembretes anuais, dia, mês e hora são obrigatórios' }
             );
           }
+          if (!mesesValidos.includes(mes)) {
+            throw new AppError(
+              HttpStatus.BAD_REQUEST,
+              ApiMessages.VALIDATION_ERROR,
+              { message: `Mês inválido. Valores aceitos: ${mesesValidos.join(', ')}` }
+            );
+          }
           break;
       }
     }
-    
-    const [result] = await pool.execute(
-      `INSERT INTO lembretes (
-        titulo, descricao, tipo, data_hora, recorrente, frequencia, 
-        dia, hora, data, dia_semana, mes, usuario_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        titulo, descricao, tipo, data_hora, recorrente, frequencia,
-        dia, hora, data, dia_semana, mes, req.user.userId
-      ]
-    );
-    
-    res.status(HttpStatus.CREATED).json(
-      successResponse(
-        HttpStatus.CREATED,
-        ApiMessages.CREATED,
-        { id: result.insertId }
-      )
-    );
+
+    try {
+      const [result] = await pool.execute(
+        `INSERT INTO lembretes (
+          titulo, descricao, tipo, data_hora, recorrente, frequencia, 
+          dia, hora, data, dia_semana, mes, usuario_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          titulo, descricao, tipo, data_hora, recorrente, frequencia,
+          dia, hora, data, dia_semana, mes, req.user.userId
+        ]
+      );
+      
+      res.status(HttpStatus.CREATED).json(
+        successResponse(
+          HttpStatus.CREATED,
+          ApiMessages.CREATED,
+          { 
+            id: result.insertId,
+            message: 'Lembrete criado com sucesso',
+            dados: {
+              titulo,
+              tipo,
+              recorrente,
+              frequencia
+            }
+          }
+        )
+      );
+    } catch (dbError) {
+      console.error('Erro no banco de dados:', dbError);
+      throw new AppError(
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        'Erro ao salvar no banco de dados',
+        { 
+          message: dbError.message,
+          code: dbError.code,
+          sqlMessage: dbError.sqlMessage 
+        }
+      );
+    }
   } catch (error) {
+    console.error('Erro na criação do lembrete:', error);
     next(error);
   }
 });
