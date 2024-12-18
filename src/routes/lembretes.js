@@ -204,15 +204,28 @@ router.post('/', auth, async (req, res, next) => {
     }
 
     try {
+      // Converte undefined para null em todos os valores
+      const values = [
+        titulo || null,
+        descricao || null,
+        tipo || null,
+        data_hora || null,
+        recorrente || false,
+        frequencia || null,
+        dia || null,
+        hora || null,
+        data || null,
+        dia_semana || null,
+        mes || null,
+        req.user.userId
+      ];
+
       const [result] = await pool.execute(
         `INSERT INTO lembretes (
           titulo, descricao, tipo, data_hora, recorrente, frequencia, 
           dia, hora, data, dia_semana, mes, usuario_id
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          titulo, descricao, tipo, data_hora, recorrente, frequencia,
-          dia, hora, data, dia_semana, mes, req.user.userId
-        ]
+        values
       );
       
       res.status(HttpStatus.CREATED).json(
@@ -225,8 +238,8 @@ router.post('/', auth, async (req, res, next) => {
             dados: {
               titulo,
               tipo,
-              recorrente,
-              frequencia
+              recorrente: recorrente || false,
+              frequencia: frequencia || null
             }
           }
         )
