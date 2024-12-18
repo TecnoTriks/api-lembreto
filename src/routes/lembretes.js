@@ -7,6 +7,61 @@ const { AppError } = require('../middleware/errorHandler');
 
 /**
  * @swagger
+ * components:
+ *   schemas:
+ *     Lembrete:
+ *       type: object
+ *       required:
+ *         - titulo
+ *         - tipo
+ *         - data_hora
+ *       properties:
+ *         titulo:
+ *           type: string
+ *           description: Título do lembrete
+ *         descricao:
+ *           type: string
+ *           description: Descrição detalhada do lembrete
+ *         tipo:
+ *           type: string
+ *           enum: [Contas a Pagar, Saúde, Normal]
+ *           description: Tipo do lembrete
+ *         data_hora:
+ *           type: string
+ *           format: date-time
+ *           description: Data e hora do lembrete
+ *         recorrente:
+ *           type: boolean
+ *           description: Indica se o lembrete é recorrente
+ *         frequencia:
+ *           type: string
+ *           enum: [Diária, Semanal, Mensal, Anual]
+ *           description: Frequência do lembrete recorrente
+ *         dia:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 31
+ *           description: Dia do mês para lembretes recorrentes mensais
+ *         hora:
+ *           type: string
+ *           format: time
+ *           description: Hora específica para o lembrete
+ *         data:
+ *           type: string
+ *           format: date
+ *           description: Data específica para o lembrete
+ *         dia_semana:
+ *           type: string
+ *           enum: [Domingo, Segunda, Terça, Quarta, Quinta, Sexta, Sábado]
+ *           description: Dia da semana para lembretes recorrentes semanais
+ *         mes:
+ *           type: string
+ *           enum: [Janeiro, Fevereiro, Março, Abril, Maio, Junho, Julho, Agosto, Setembro, Outubro, Novembro, Dezembro]
+ *           description: Mês para lembretes recorrentes anuais
+ */
+
+/**
+ * @swagger
  * /api/lembretes:
  *   post:
  *     tags: [Lembretes]
@@ -18,34 +73,26 @@ const { AppError } = require('../middleware/errorHandler');
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required:
- *               - titulo
- *               - data_hora
- *               - tipo
- *             properties:
- *               titulo:
- *                 type: string
- *               descricao:
- *                 type: string
- *               tipo:
- *                 type: string
- *                 enum: [Contas a Pagar, Saúde, Normal]
- *               data_hora:
- *                 type: string
- *                 format: date-time
- *               recorrente:
- *                 type: boolean
- *               frequencia:
- *                 type: string
- *                 enum: [Diária, Semanal, Mensal, Anual]
+ *             $ref: '#/components/schemas/Lembrete'
  *     responses:
  *       201:
  *         description: Lembrete criado com sucesso
  */
 router.post('/', auth, async (req, res, next) => {
   try {
-    const { titulo, descricao, tipo, data_hora, recorrente, frequencia } = req.body;
+    const { 
+      titulo, 
+      descricao, 
+      tipo, 
+      data_hora, 
+      recorrente, 
+      frequencia,
+      dia,
+      hora,
+      data,
+      dia_semana,
+      mes
+    } = req.body;
 
     if (!titulo || !tipo || !data_hora) {
       throw new AppError(
@@ -54,10 +101,49 @@ router.post('/', auth, async (req, res, next) => {
         { message: 'Título, tipo e data/hora são obrigatórios' }
       );
     }
+
+    // Validação adicional para campos recorrentes
+    if (recorrente && frequencia) {
+      switch (frequencia) {
+        case 'Mensal':
+          if (!dia || !hora) {
+            throw new AppError(
+              HttpStatus.BAD_REQUEST,
+              ApiMessages.VALIDATION_ERROR,
+              { message: 'Para lembretes mensais, dia e hora são obrigatórios' }
+            );
+          }
+          break;
+        case 'Semanal':
+          if (!dia_semana || !hora) {
+            throw new AppError(
+              HttpStatus.BAD_REQUEST,
+              ApiMessages.VALIDATION_ERROR,
+              { message: 'Para lembretes semanais, dia da semana e hora são obrigatórios' }
+            );
+          }
+          break;
+        case 'Anual':
+          if (!dia || !mes || !hora) {
+            throw new AppError(
+              HttpStatus.BAD_REQUEST,
+              ApiMessages.VALIDATION_ERROR,
+              { message: 'Para lembretes anuais, dia, mês e hora são obrigatórios' }
+            );
+          }
+          break;
+      }
+    }
     
     const [result] = await pool.execute(
-      'INSERT INTO lembretes (titulo, descricao, tipo, data_hora, recorrente, frequencia, usuario_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [titulo, descricao, tipo, data_hora, recorrente, frequencia, req.user.userId]
+      `INSERT INTO lembretes (
+        titulo, descricao, tipo, data_hora, recorrente, frequencia, 
+        dia, hora, data, dia_semana, mes, usuario_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        titulo, descricao, tipo, data_hora, recorrente, frequencia,
+        dia, hora, data, dia_semana, mes, req.user.userId
+      ]
     );
     
     res.status(HttpStatus.CREATED).json(
@@ -133,20 +219,7 @@ router.get('/', auth, async (req, res, next) => {
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             properties:
- *               titulo:
- *                 type: string
- *               descricao:
- *                 type: string
- *               tipo:
- *                 type: string
- *               data_hora:
- *                 type: string
- *               recorrente:
- *                 type: boolean
- *               frequencia:
- *                 type: string
+ *             $ref: '#/components/schemas/Lembrete'
  *     responses:
  *       200:
  *         description: Lembrete atualizado com sucesso
@@ -154,60 +227,91 @@ router.get('/', auth, async (req, res, next) => {
 router.put('/:id', auth, async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { titulo, descricao, tipo, data_hora, recorrente, frequencia } = req.body;
-    
-    // Constrói a query de atualização dinamicamente
-    const updateFields = [];
-    const updateValues = [];
-    
-    if (titulo !== undefined) {
-      updateFields.push('titulo = ?');
-      updateValues.push(titulo);
-    }
-    if (descricao !== undefined) {
-      updateFields.push('descricao = ?');
-      updateValues.push(descricao);
-    }
-    if (tipo !== undefined) {
-      updateFields.push('tipo = ?');
-      updateValues.push(tipo);
-    }
-    if (data_hora !== undefined) {
-      updateFields.push('data_hora = ?');
-      updateValues.push(data_hora);
-    }
-    if (recorrente !== undefined) {
-      updateFields.push('recorrente = ?');
-      updateValues.push(recorrente);
-    }
-    if (frequencia !== undefined) {
-      updateFields.push('frequencia = ?');
-      updateValues.push(frequencia);
-    }
-    
-    if (updateFields.length === 0) {
-      throw new AppError(
-        HttpStatus.BAD_REQUEST,
-        'Nenhum campo para atualizar'
-      );
-    }
-    
-    const query = `UPDATE lembretes SET ${updateFields.join(', ')} WHERE id = ? AND usuario_id = ?`;
-    const values = [...updateValues, id, req.user.userId];
-    
-    const [result] = await pool.execute(query, values);
-    
-    if (result.affectedRows === 0) {
+    const { 
+      titulo, 
+      descricao, 
+      tipo, 
+      data_hora, 
+      recorrente, 
+      frequencia,
+      dia,
+      hora,
+      data,
+      dia_semana,
+      mes
+    } = req.body;
+
+    // Verificar se o lembrete existe e pertence ao usuário
+    const [lembretes] = await pool.execute(
+      'SELECT id FROM lembretes WHERE id = ? AND usuario_id = ?',
+      [id, req.user.userId]
+    );
+
+    if (lembretes.length === 0) {
       throw new AppError(
         HttpStatus.NOT_FOUND,
         'Lembrete não encontrado'
       );
     }
-    
+
+    // Validação adicional para campos recorrentes
+    if (recorrente && frequencia) {
+      switch (frequencia) {
+        case 'Mensal':
+          if (!dia || !hora) {
+            throw new AppError(
+              HttpStatus.BAD_REQUEST,
+              ApiMessages.VALIDATION_ERROR,
+              { message: 'Para lembretes mensais, dia e hora são obrigatórios' }
+            );
+          }
+          break;
+        case 'Semanal':
+          if (!dia_semana || !hora) {
+            throw new AppError(
+              HttpStatus.BAD_REQUEST,
+              ApiMessages.VALIDATION_ERROR,
+              { message: 'Para lembretes semanais, dia da semana e hora são obrigatórios' }
+            );
+          }
+          break;
+        case 'Anual':
+          if (!dia || !mes || !hora) {
+            throw new AppError(
+              HttpStatus.BAD_REQUEST,
+              ApiMessages.VALIDATION_ERROR,
+              { message: 'Para lembretes anuais, dia, mês e hora são obrigatórios' }
+            );
+          }
+          break;
+      }
+    }
+
+    await pool.execute(
+      `UPDATE lembretes SET 
+        titulo = ?, 
+        descricao = ?, 
+        tipo = ?, 
+        data_hora = ?, 
+        recorrente = ?, 
+        frequencia = ?,
+        dia = ?,
+        hora = ?,
+        data = ?,
+        dia_semana = ?,
+        mes = ?
+      WHERE id = ? AND usuario_id = ?`,
+      [
+        titulo, descricao, tipo, data_hora, recorrente, frequencia,
+        dia, hora, data, dia_semana, mes,
+        id, req.user.userId
+      ]
+    );
+
     res.json(
       successResponse(
         HttpStatus.OK,
-        'Lembrete atualizado com sucesso'
+        ApiMessages.UPDATED
       )
     );
   } catch (error) {

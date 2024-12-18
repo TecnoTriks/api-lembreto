@@ -1,102 +1,232 @@
+-- phpMyAdmin SQL Dump
+-- version 5.2.1
+-- https://www.phpmyadmin.net/
+--
+-- Host: 127.0.0.1:3306
+-- Tempo de geração: 18/12/2024 às 17:33
+-- Versão do servidor: 10.11.10-MariaDB
+-- Versão do PHP: 7.2.34
+
+SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
+START TRANSACTION;
+SET time_zone = "+00:00";
 
 
--- 2. Tabelas Principais
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
+/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
+/*!40101 SET NAMES utf8mb4 */;
 
--- 2.1. Tabela de Usuários
-CREATE TABLE IF NOT EXISTS usuarios (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    nome VARCHAR(100) NOT NULL,
-    email VARCHAR(100) UNIQUE NOT NULL,
-    senha VARCHAR(255) NOT NULL,
-    telefone VARCHAR(20) UNIQUE NOT NULL,
-    data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    status ENUM('Ativo', 'Inativo') DEFAULT 'Ativo',
-    INDEX (email),
-    INDEX (telefone)
-) ENGINE=InnoDB;
+--
+-- Banco de dados: `u258304317_lembreto`
+--
 
--- 2.2. Tabela de Lembretes
-CREATE TABLE IF NOT EXISTS lembretes (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    titulo VARCHAR(255) NOT NULL,
-    descricao TEXT,
-    tipo ENUM('Contas a Pagar', 'Saúde', 'Normal') NOT NULL,
-    data_hora DATETIME NOT NULL,
-    recorrente BOOLEAN DEFAULT FALSE,
-    frequencia ENUM('Diária', 'Semanal', 'Mensal', 'Anual') NULL,
-    status ENUM('Ativo', 'Concluído', 'Cancelado') DEFAULT 'Ativo',
-    usuario_id INT NOT NULL,
-    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
-    INDEX (usuario_id),
-    INDEX (data_hora),
-    INDEX (tipo)
-) ENGINE=InnoDB;
+-- --------------------------------------------------------
 
--- 2.3. Tabela de Tags
-CREATE TABLE IF NOT EXISTS tags (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    nome VARCHAR(50) NOT NULL,
-    cor VARCHAR(7) DEFAULT '#FFFFFF',
-    icone VARCHAR(100) DEFAULT NULL,
-    usuario_id INT NOT NULL,
-    FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
-    INDEX (usuario_id),
-    INDEX (nome)
-) ENGINE=InnoDB;
+--
+-- Estrutura para tabela `lembretes`
+--
 
--- 2.4. Tabela de Relacionamento Lembretes_Tags (N:N)
-CREATE TABLE IF NOT EXISTS lembretes_tags (
-    lembrete_id INT NOT NULL,
-    tag_id INT NOT NULL,
-    PRIMARY KEY (lembrete_id, tag_id),
-    FOREIGN KEY (lembrete_id) REFERENCES lembretes(id) ON DELETE CASCADE,
-    FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE,
-    INDEX (lembrete_id),
-    INDEX (tag_id)
-) ENGINE=InnoDB;
+CREATE TABLE `lembretes` (
+  `id` int(11) NOT NULL,
+  `titulo` varchar(255) NOT NULL,
+  `descricao` text DEFAULT NULL,
+  `tipo` enum('Contas a Pagar','Saúde','Normal') NOT NULL,
+  `data_hora` datetime NOT NULL,
+  `recorrente` tinyint(1) DEFAULT 0,
+  `frequencia` enum('Diária','Semanal','Mensal','Anual') DEFAULT NULL,
+  `status` enum('Ativo','Concluído','Cancelado') DEFAULT 'Ativo',
+  `usuario_id` int(11) NOT NULL,
+  `dia` int(11) DEFAULT NULL,
+  `hora` time DEFAULT NULL,
+  `data` date DEFAULT NULL,
+  `dia_semana` enum('Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado') DEFAULT NULL,
+  `mes` enum('Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro') DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 2.5. Tabela de Notificações
-CREATE TABLE IF NOT EXISTS notificacoes (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    lembrete_id INT NOT NULL,
-    data_envio DATETIME NOT NULL,
-    tipo_envio ENUM('WhatsApp', 'SMS') NOT NULL,
-    status ENUM('Sucesso', 'Falha') DEFAULT 'Sucesso',
-    mensagem TEXT,
-    FOREIGN KEY (lembrete_id) REFERENCES lembretes(id) ON DELETE CASCADE,
-    INDEX (lembrete_id),
-    INDEX (data_envio),
-    INDEX (tipo_envio),
-    INDEX (status)
-) ENGINE=InnoDB;
+-- --------------------------------------------------------
 
--- 3. Índices e Otimizações Adicionais
+--
+-- Estrutura para tabela `lembretes_tags`
+--
 
--- Índice composto para melhorar a performance das consultas de lembretes por usuário e data_hora
-CREATE INDEX idx_lembretes_usuario_data ON lembretes(usuario_id, data_hora);
+CREATE TABLE `lembretes_tags` (
+  `lembrete_id` int(11) NOT NULL,
+  `tag_id` int(11) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Índice composto para tags por usuário e nome
-CREATE INDEX idx_tags_usuario_nome ON tags(usuario_id, nome);
+-- --------------------------------------------------------
 
--- Índice para notificações por tipo_envio e status
-CREATE INDEX idx_notificacoes_tipo_status ON notificacoes(tipo_envio, status);
+--
+-- Estrutura para tabela `notificacoes`
+--
 
--- 4. Stored Procedures e Triggers (Opcional)
+CREATE TABLE `notificacoes` (
+  `id` int(11) NOT NULL,
+  `lembrete_id` int(11) NOT NULL,
+  `data_envio` datetime NOT NULL,
+  `tipo_envio` enum('WhatsApp','SMS') NOT NULL,
+  `status` enum('Sucesso','Falha') DEFAULT 'Sucesso',
+  `mensagem` text DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Exemplo de Trigger para atualizar o status do lembrete após a criação de uma notificação de sucesso
-DELIMITER //
-
-CREATE TRIGGER trg_after_notificacao_insert
-AFTER INSERT ON notificacoes
-FOR EACH ROW
-BEGIN
+--
+-- Acionadores `notificacoes`
+--
+DELIMITER $$
+CREATE TRIGGER `trg_after_notificacao_insert` AFTER INSERT ON `notificacoes` FOR EACH ROW BEGIN
     IF NEW.status = 'Sucesso' THEN
         UPDATE lembretes
         SET status = 'Concluído'
         WHERE id = NEW.lembrete_id;
     END IF;
-END;
-//
-
+END
+$$
 DELIMITER ;
 
+-- --------------------------------------------------------
+
+--
+-- Estrutura para tabela `tags`
+--
+
+CREATE TABLE `tags` (
+  `id` int(11) NOT NULL,
+  `nome` varchar(50) NOT NULL,
+  `cor` varchar(7) DEFAULT '#FFFFFF',
+  `icone` varchar(100) DEFAULT NULL,
+  `usuario_id` int(11) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Estrutura para tabela `usuarios`
+--
+
+CREATE TABLE `usuarios` (
+  `id` int(11) NOT NULL,
+  `nome` varchar(100) NOT NULL,
+  `email` varchar(100) NOT NULL,
+  `senha` varchar(255) NOT NULL,
+  `telefone` varchar(20) NOT NULL,
+  `data_criacao` timestamp NULL DEFAULT current_timestamp(),
+  `status` enum('Ativo','Inativo') DEFAULT 'Ativo',
+  `api_key` varchar(100) DEFAULT NULL,
+  `foto_perfil` varchar(255) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Índices para tabelas despejadas
+--
+
+--
+-- Índices de tabela `lembretes`
+--
+ALTER TABLE `lembretes`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `usuario_id` (`usuario_id`),
+  ADD KEY `data_hora` (`data_hora`),
+  ADD KEY `tipo` (`tipo`),
+  ADD KEY `idx_lembretes_usuario_data` (`usuario_id`,`data_hora`);
+
+--
+-- Índices de tabela `lembretes_tags`
+--
+ALTER TABLE `lembretes_tags`
+  ADD PRIMARY KEY (`lembrete_id`,`tag_id`),
+  ADD KEY `lembrete_id` (`lembrete_id`),
+  ADD KEY `tag_id` (`tag_id`);
+
+--
+-- Índices de tabela `notificacoes`
+--
+ALTER TABLE `notificacoes`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `lembrete_id` (`lembrete_id`),
+  ADD KEY `data_envio` (`data_envio`),
+  ADD KEY `tipo_envio` (`tipo_envio`),
+  ADD KEY `status` (`status`),
+  ADD KEY `idx_notificacoes_tipo_status` (`tipo_envio`,`status`);
+
+--
+-- Índices de tabela `tags`
+--
+ALTER TABLE `tags`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `usuario_id` (`usuario_id`),
+  ADD KEY `nome` (`nome`),
+  ADD KEY `idx_tags_usuario_nome` (`usuario_id`,`nome`);
+
+--
+-- Índices de tabela `usuarios`
+--
+ALTER TABLE `usuarios`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `email` (`email`),
+  ADD UNIQUE KEY `telefone` (`telefone`),
+  ADD UNIQUE KEY `api_key` (`api_key`),
+  ADD KEY `email_2` (`email`),
+  ADD KEY `telefone_2` (`telefone`);
+
+--
+-- AUTO_INCREMENT para tabelas despejadas
+--
+
+--
+-- AUTO_INCREMENT de tabela `lembretes`
+--
+ALTER TABLE `lembretes`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=37;
+
+--
+-- AUTO_INCREMENT de tabela `notificacoes`
+--
+ALTER TABLE `notificacoes`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT de tabela `tags`
+--
+ALTER TABLE `tags`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=23;
+
+--
+-- AUTO_INCREMENT de tabela `usuarios`
+--
+ALTER TABLE `usuarios`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=12;
+
+--
+-- Restrições para tabelas despejadas
+--
+
+--
+-- Restrições para tabelas `lembretes`
+--
+ALTER TABLE `lembretes`
+  ADD CONSTRAINT `lembretes_ibfk_1` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE;
+
+--
+-- Restrições para tabelas `lembretes_tags`
+--
+ALTER TABLE `lembretes_tags`
+  ADD CONSTRAINT `lembretes_tags_ibfk_1` FOREIGN KEY (`lembrete_id`) REFERENCES `lembretes` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `lembretes_tags_ibfk_2` FOREIGN KEY (`tag_id`) REFERENCES `tags` (`id`) ON DELETE CASCADE;
+
+--
+-- Restrições para tabelas `notificacoes`
+--
+ALTER TABLE `notificacoes`
+  ADD CONSTRAINT `notificacoes_ibfk_1` FOREIGN KEY (`lembrete_id`) REFERENCES `lembretes` (`id`) ON DELETE CASCADE;
+
+--
+-- Restrições para tabelas `tags`
+--
+ALTER TABLE `tags`
+  ADD CONSTRAINT `tags_ibfk_1` FOREIGN KEY (`usuario_id`) REFERENCES `usuarios` (`id`) ON DELETE CASCADE;
+COMMIT;
+
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
+/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
