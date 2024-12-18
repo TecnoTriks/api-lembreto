@@ -14,6 +14,7 @@ const { AppError } = require('../middleware/errorHandler');
  *   post:
  *     tags: [Usuários]
  *     summary: Registra um novo usuário
+ *     description: Registra um novo usuário no sistema. O telefone pode ser enviado com ou sem formatação (exemplo: "63984193411" ou "(63) 98419-3411")
  *     requestBody:
  *       required: true
  *       content:
@@ -28,15 +29,42 @@ const { AppError } = require('../middleware/errorHandler');
  *             properties:
  *               nome:
  *                 type: string
+ *                 example: "João Silva"
  *               email:
  *                 type: string
+ *                 format: email
+ *                 example: "joao@email.com"
  *               senha:
  *                 type: string
+ *                 format: password
+ *                 example: "senha123"
  *               telefone:
  *                 type: string
+ *                 example: "(63) 98419-3411"
+ *                 description: "Número de telefone com ou sem formatação. Será salvo apenas os números."
  *     responses:
  *       201:
  *         description: Usuário registrado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: integer
+ *                   example: 201
+ *                 message:
+ *                   type: string
+ *                   example: "Criado com sucesso"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       example: 1
+ *                     api_key:
+ *                       type: string
+ *                       example: "a1b2c3d4..."
  */
 router.post('/registro', async (req, res, next) => {
   try {
@@ -50,9 +78,12 @@ router.post('/registro', async (req, res, next) => {
       );
     }
 
+    // Remove todos os caracteres não numéricos do telefone
+    const telefoneNumerico = telefone.replace(/\D/g, '');
+
     const [existingUser] = await pool.execute(
       'SELECT id FROM usuarios WHERE email = ? OR telefone = ?',
-      [email, telefone]
+      [email, telefoneNumerico]
     );
 
     if (existingUser.length > 0) {
@@ -67,7 +98,7 @@ router.post('/registro', async (req, res, next) => {
     
     const [result] = await pool.execute(
       'INSERT INTO usuarios (nome, email, senha, telefone, api_key) VALUES (?, ?, ?, ?, ?)',
-      [nome, email, hashedSenha, telefone, apiKey]
+      [nome, email, hashedSenha, telefoneNumerico, apiKey]
     );
     
     res.status(HttpStatus.CREATED).json(
@@ -91,6 +122,7 @@ router.post('/registro', async (req, res, next) => {
  *   post:
  *     tags: [Usuários]
  *     summary: Realiza login do usuário
+ *     description: Realiza login usando telefone e senha. O telefone pode ser enviado com ou sem formatação.
  *     requestBody:
  *       required: true
  *       content:
@@ -98,42 +130,69 @@ router.post('/registro', async (req, res, next) => {
  *           schema:
  *             type: object
  *             required:
- *               - email
+ *               - telefone
  *               - senha
  *             properties:
- *               email:
+ *               telefone:
  *                 type: string
+ *                 example: "(63) 98419-3411"
+ *                 description: "Número de telefone com ou sem formatação"
  *               senha:
  *                 type: string
+ *                 format: password
+ *                 example: "senha123"
  *     responses:
  *       200:
  *         description: Login realizado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: integer
+ *                   example: 200
+ *                 message:
+ *                   type: string
+ *                   example: "Login realizado com sucesso"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     token:
+ *                       type: string
+ *                       example: "eyJhbGciOiJ..."
+ *                     api_key:
+ *                       type: string
+ *                       example: "a1b2c3d4..."
  */
 router.post('/login', async (req, res, next) => {
   try {
-    const { email, senha } = req.body;
+    const { telefone, senha } = req.body;
 
-    if (!email || !senha) {
+    if (!telefone || !senha) {
       throw new AppError(
         HttpStatus.BAD_REQUEST,
         ApiMessages.VALIDATION_ERROR,
-        { message: 'Email e senha são obrigatórios' }
+        { message: 'Telefone e senha são obrigatórios' }
       );
     }
 
-    const [users] = await pool.execute(
-      'SELECT id, nome, email, senha, api_key FROM usuarios WHERE email = ?',
-      [email]
+    // Remove todos os caracteres não numéricos do telefone
+    const telefoneNumerico = telefone.replace(/\D/g, '');
+
+    const [rows] = await pool.execute(
+      'SELECT id, nome, email, senha, api_key, telefone FROM usuarios WHERE telefone = ?',
+      [telefoneNumerico]
     );
 
-    if (users.length === 0) {
+    if (rows.length === 0) {
       throw new AppError(
         HttpStatus.UNAUTHORIZED,
         'Credenciais inválidas'
       );
     }
 
-    const user = users[0];
+    const user = rows[0];
     const senhaValida = await bcrypt.compare(senha, user.senha);
 
     if (!senhaValida) {
