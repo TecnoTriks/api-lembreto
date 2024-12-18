@@ -10,38 +10,57 @@ const { AppError } = require('../middleware/errorHandler');
 
 /**
  * @swagger
+ * tags:
+ *   name: Usuários
+ *   description: Endpoints para gerenciamento de usuários
+ */
+
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     Usuario:
+ *       type: object
+ *       required:
+ *         - nome
+ *         - email
+ *         - senha
+ *         - telefone
+ *       properties:
+ *         nome:
+ *           type: string
+ *           description: Nome completo do usuário
+ *         email:
+ *           type: string
+ *           format: email
+ *           description: Email do usuário
+ *         senha:
+ *           type: string
+ *           format: password
+ *           description: Senha do usuário
+ *         telefone:
+ *           type: string
+ *           description: Telefone do usuário (apenas números)
+ */
+
+/**
+ * @swagger
  * /api/usuarios/registro:
  *   post:
  *     tags: [Usuários]
  *     summary: Registra um novo usuário
- *     description: Registra um novo usuário no sistema. O telefone pode ser enviado com ou sem formatação (exemplo: "63984193411" ou "(63) 98419-3411")
+ *     description: Registra um novo usuário no sistema. O telefone pode ser enviado com ou sem formatação (exemplo "63984193411" ou "(63) 98419-3411")
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required:
- *               - nome
- *               - email
- *               - senha
- *               - telefone
- *             properties:
- *               nome:
- *                 type: string
- *                 example: "João Silva"
- *               email:
- *                 type: string
- *                 format: email
- *                 example: "joao@email.com"
- *               senha:
- *                 type: string
- *                 format: password
- *                 example: "senha123"
- *               telefone:
- *                 type: string
- *                 example: "(63) 98419-3411"
- *                 description: "Número de telefone com ou sem formatação. Será salvo apenas os números."
+ *             $ref: '#/components/schemas/Usuario'
+ *           example:
+ *             nome: "João Silva"
+ *             email: "joao@email.com"
+ *             senha: "senha123"
+ *             telefone: "(63) 98419-3411"
  *     responses:
  *       201:
  *         description: Usuário registrado com sucesso
@@ -65,6 +84,10 @@ const { AppError } = require('../middleware/errorHandler');
  *                     api_key:
  *                       type: string
  *                       example: "a1b2c3d4..."
+ *       400:
+ *         description: Dados inválidos
+ *       409:
+ *         description: Email ou telefone já cadastrado
  */
 router.post('/registro', async (req, res, next) => {
   try {
@@ -164,6 +187,8 @@ router.post('/registro', async (req, res, next) => {
  *                     api_key:
  *                       type: string
  *                       example: "a1b2c3d4..."
+ *       401:
+ *         description: Credenciais inválidas
  */
 router.post('/login', async (req, res, next) => {
   try {
@@ -234,6 +259,43 @@ router.post('/login', async (req, res, next) => {
  *     responses:
  *       200:
  *         description: Perfil retornado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: integer
+ *                   example: 200
+ *                 message:
+ *                   type: string
+ *                   example: "Perfil recuperado com sucesso"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       example: 1
+ *                     nome:
+ *                       type: string
+ *                       example: "João Silva"
+ *                     email:
+ *                       type: string
+ *                       example: "joao@email.com"
+ *                     telefone:
+ *                       type: string
+ *                       example: "63984193411"
+ *                     data_criacao:
+ *                       type: string
+ *                       example: "2022-01-01T00:00:00.000Z"
+ *                     status:
+ *                       type: string
+ *                       example: "ativo"
+ *                     api_key:
+ *                       type: string
+ *                       example: "a1b2c3d4..."
+ *       404:
+ *         description: Usuário não encontrado
  */
 router.get('/perfil', auth, async (req, res, next) => {
   try {
@@ -272,6 +334,23 @@ router.get('/perfil', auth, async (req, res, next) => {
  *     responses:
  *       200:
  *         description: API Key regenerada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: integer
+ *                   example: 200
+ *                 message:
+ *                   type: string
+ *                   example: "API Key regenerada com sucesso"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     api_key:
+ *                       type: string
+ *                       example: "a1b2c3d4..."
  */
 router.post('/regenerar-api-key', auth, async (req, res, next) => {
   try {
