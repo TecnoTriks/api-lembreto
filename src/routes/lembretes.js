@@ -18,45 +18,88 @@ const { AppError } = require('../middleware/errorHandler');
  *         titulo:
  *           type: string
  *           description: Título do lembrete
+ *           example: "Consulta médica"
  *         descricao:
  *           type: string
  *           description: Descrição detalhada do lembrete
+ *           example: "Consulta de rotina com Dr. João"
  *         tipo:
  *           type: string
  *           enum: [Contas a Pagar, Saúde, Normal]
  *           description: Tipo do lembrete
+ *           example: "Saúde"
  *         data_hora:
  *           type: string
  *           format: date-time
- *           description: Data e hora do lembrete (opcional)
+ *           description: Data e hora específica do lembrete (opcional, usado apenas para lembretes não recorrentes)
+ *           example: "2024-12-25T10:00:00"
  *         recorrente:
  *           type: boolean
  *           description: Indica se o lembrete é recorrente
+ *           default: false
+ *           example: true
  *         frequencia:
  *           type: string
  *           enum: [Diária, Semanal, Mensal, Anual]
- *           description: Frequência do lembrete recorrente
+ *           description: Frequência do lembrete recorrente (obrigatório se recorrente for true)
+ *           example: "Mensal"
  *         dia:
  *           type: integer
  *           minimum: 1
  *           maximum: 31
- *           description: Dia do mês para lembretes recorrentes mensais
+ *           description: Dia do mês para lembretes mensais ou anuais
+ *           example: 15
  *         hora:
  *           type: string
  *           format: time
- *           description: Hora específica para o lembrete
+ *           description: Hora específica para lembretes recorrentes (HH:mm)
+ *           example: "14:30"
  *         data:
  *           type: string
  *           format: date
- *           description: Data específica para o lembrete
+ *           description: Data específica para o lembrete (YYYY-MM-DD)
+ *           example: "2024-12-25"
  *         dia_semana:
  *           type: string
  *           enum: [Domingo, Segunda, Terça, Quarta, Quinta, Sexta, Sábado]
- *           description: Dia da semana para lembretes recorrentes semanais
+ *           description: Dia da semana para lembretes semanais
+ *           example: "Segunda"
  *         mes:
  *           type: string
  *           enum: [Janeiro, Fevereiro, Março, Abril, Maio, Junho, Julho, Agosto, Setembro, Outubro, Novembro, Dezembro]
- *           description: Mês para lembretes recorrentes anuais
+ *           description: Mês para lembretes anuais
+ *           example: "Dezembro"
+ * 
+ *     LembreteResponse:
+ *       type: object
+ *       properties:
+ *         status:
+ *           type: integer
+ *           example: 201
+ *         message:
+ *           type: string
+ *           example: "Lembrete criado com sucesso"
+ *         data:
+ *           type: object
+ *           properties:
+ *             id:
+ *               type: integer
+ *               example: 1
+ *             dados:
+ *               type: object
+ *               properties:
+ *                 titulo:
+ *                   type: string
+ *                   example: "Consulta médica"
+ *                 tipo:
+ *                   type: string
+ *                   example: "Saúde"
+ *                 recorrente:
+ *                   type: boolean
+ *                   example: true
+ *                 frequencia:
+ *                   type: string
+ *                   example: "Mensal"
  */
 
 /**
@@ -66,11 +109,59 @@ const { AppError } = require('../middleware/errorHandler');
  *     tags: [Lembretes]
  *     summary: Cria um novo lembrete
  *     description: |
- *       Cria um novo lembrete com os dados fornecidos.
+ *       Cria um novo lembrete com os dados fornecidos. O lembrete pode ser único ou recorrente.
+ *       
+ *       Para lembretes não recorrentes:
+ *       - Apenas título e tipo são obrigatórios
+ *       - data_hora é opcional
+ *       
  *       Para lembretes recorrentes, os campos obrigatórios variam conforme a frequência:
- *       - Mensal: requer dia e hora
- *       - Semanal: requer dia_semana e hora
- *       - Anual: requer dia, mês e hora
+ *       - Diária: apenas hora
+ *       - Semanal: dia_semana e hora
+ *       - Mensal: dia e hora
+ *       - Anual: dia, mês e hora
+ *       
+ *       Exemplos:
+ *       1. Lembrete simples:
+ *          ```json
+ *          {
+ *            "titulo": "Reunião",
+ *            "tipo": "Normal"
+ *          }
+ *          ```
+ *       
+ *       2. Lembrete único com data:
+ *          ```json
+ *          {
+ *            "titulo": "Dentista",
+ *            "tipo": "Saúde",
+ *            "data_hora": "2024-12-25T10:00:00"
+ *          }
+ *          ```
+ *       
+ *       3. Lembrete recorrente mensal:
+ *          ```json
+ *          {
+ *            "titulo": "Pagar aluguel",
+ *            "tipo": "Contas a Pagar",
+ *            "recorrente": true,
+ *            "frequencia": "Mensal",
+ *            "dia": 5,
+ *            "hora": "10:00"
+ *          }
+ *          ```
+ *       
+ *       4. Lembrete recorrente semanal:
+ *          ```json
+ *          {
+ *            "titulo": "Reunião de equipe",
+ *            "tipo": "Normal",
+ *            "recorrente": true,
+ *            "frequencia": "Semanal",
+ *            "dia_semana": "Segunda",
+ *            "hora": "14:30"
+ *          }
+ *          ```
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -82,10 +173,36 @@ const { AppError } = require('../middleware/errorHandler');
  *     responses:
  *       201:
  *         description: Lembrete criado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/LembreteResponse'
  *       400:
  *         description: Dados inválidos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: "error"
+ *                 code:
+ *                   type: integer
+ *                   example: 400
+ *                 message:
+ *                   type: string
+ *                   example: "Erro de validação"
+ *                 errors:
+ *                   type: object
+ *                   properties:
+ *                     message:
+ *                       type: string
+ *                       example: "Título e tipo são obrigatórios"
  *       401:
  *         description: Não autorizado
+ *       500:
+ *         description: Erro interno do servidor
  */
 router.post('/', auth, async (req, res, next) => {
   try {
