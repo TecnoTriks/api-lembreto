@@ -14,7 +14,6 @@ const { AppError } = require('../middleware/errorHandler');
  *       required:
  *         - titulo
  *         - tipo
- *         - data_hora
  *       properties:
  *         titulo:
  *           type: string
@@ -29,7 +28,7 @@ const { AppError } = require('../middleware/errorHandler');
  *         data_hora:
  *           type: string
  *           format: date-time
- *           description: Data e hora do lembrete
+ *           description: Data e hora do lembrete (opcional)
  *         recorrente:
  *           type: boolean
  *           description: Indica se o lembrete é recorrente
@@ -66,6 +65,12 @@ const { AppError } = require('../middleware/errorHandler');
  *   post:
  *     tags: [Lembretes]
  *     summary: Cria um novo lembrete
+ *     description: |
+ *       Cria um novo lembrete com os dados fornecidos.
+ *       Para lembretes recorrentes, os campos obrigatórios variam conforme a frequência:
+ *       - Mensal: requer dia e hora
+ *       - Semanal: requer dia_semana e hora
+ *       - Anual: requer dia, mês e hora
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -77,6 +82,10 @@ const { AppError } = require('../middleware/errorHandler');
  *     responses:
  *       201:
  *         description: Lembrete criado com sucesso
+ *       400:
+ *         description: Dados inválidos
+ *       401:
+ *         description: Não autorizado
  */
 router.post('/', auth, async (req, res, next) => {
   try {
@@ -94,11 +103,11 @@ router.post('/', auth, async (req, res, next) => {
       mes
     } = req.body;
 
-    if (!titulo || !tipo || !data_hora) {
+    if (!titulo || !tipo) {
       throw new AppError(
         HttpStatus.BAD_REQUEST,
         ApiMessages.VALIDATION_ERROR,
-        { message: 'Título, tipo e data/hora são obrigatórios' }
+        { message: 'Título e tipo são obrigatórios' }
       );
     }
 
