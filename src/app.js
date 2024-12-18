@@ -13,6 +13,7 @@ const lembretesRoutes = require('./routes/lembretes');
 const tagsRoutes = require('./routes/tags');
 const notificacoesRoutes = require('./routes/notificacoes');
 const mensagensRoutes = require('./routes/mensagens');
+const verificacaoRoutes = require('./routes/verificacao');
 
 const app = express();
 
@@ -58,6 +59,7 @@ app.use('/api/lembretes', lembretesRoutes);
 app.use('/api/tags', tagsRoutes);
 app.use('/api/notificacoes', notificacoesRoutes);
 app.use('/api/mensagens', mensagensRoutes);
+app.use('/api/verificacao', verificacaoRoutes);
 
 // Documentação Swagger
 app.get('/api-docs', (req, res) => {
