@@ -621,6 +621,348 @@ router.get('/', auth, async (req, res, next) => {
 
 /**
  * @swagger
+ * /api/lembretes/resumo:
+ *   get:
+ *     tags: [Lembretes]
+ *     summary: Obtém um resumo dos lembretes ativos
+ *     description: |
+ *       Retorna um dashboard completo com:
+ *       - Próximo lembrete de cada tipo
+ *       - Contagens por categoria
+ *       - Lembretes próximos de vencer
+ *       - Estatísticas gerais
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Resumo dos lembretes retornado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: integer
+ *                   example: 200
+ *                 message:
+ *                   type: string
+ *                   example: "Resumo obtido com sucesso"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     proximosLembretes:
+ *                       type: object
+ *                       properties:
+ *                         contasPagar:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                               example: 1
+ *                             titulo:
+ *                               type: string
+ *                               example: "Pagar Aluguel"
+ *                             proximaExecucao:
+ *                               type: string
+ *                               format: date-time
+ *                               example: "2024-12-20T10:00:00"
+ *                         saude:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                               example: 2
+ *                             titulo:
+ *                               type: string
+ *                               example: "Consulta Médica"
+ *                             proximaExecucao:
+ *                               type: string
+ *                               format: date-time
+ *                               example: "2024-12-21T15:30:00"
+ *                         normal:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                               example: 3
+ *                             titulo:
+ *                               type: string
+ *                               example: "Reunião"
+ *                             proximaExecucao:
+ *                               type: string
+ *                               format: date-time
+ *                               example: "2024-12-19T14:00:00"
+ *                     contagens:
+ *                       type: object
+ *                       properties:
+ *                         total:
+ *                           type: integer
+ *                           example: 15
+ *                         ativos:
+ *                           type: integer
+ *                           example: 12
+ *                         vencidos:
+ *                           type: integer
+ *                           example: 3
+ *                         porTipo:
+ *                           type: object
+ *                           properties:
+ *                             contasPagar:
+ *                               type: integer
+ *                               example: 5
+ *                             saude:
+ *                               type: integer
+ *                               example: 3
+ *                             normal:
+ *                               type: integer
+ *                               example: 7
+ *                         porFrequencia:
+ *                           type: object
+ *                           properties:
+ *                             unico:
+ *                               type: integer
+ *                               example: 5
+ *                             diario:
+ *                               type: integer
+ *                               example: 2
+ *                             semanal:
+ *                               type: integer
+ *                               example: 3
+ *                             mensal:
+ *                               type: integer
+ *                               example: 4
+ *                             anual:
+ *                               type: integer
+ *                               example: 1
+ *                     proximosVencer:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: integer
+ *                             example: 4
+ *                           titulo:
+ *                             type: string
+ *                             example: "Pagar Energia"
+ *                           tipo:
+ *                             type: string
+ *                             example: "Contas a Pagar"
+ *                           proximaExecucao:
+ *                             type: string
+ *                             format: date-time
+ *                             example: "2024-12-19T23:59:59"
+ *                     estatisticas:
+ *                       type: object
+ *                       properties:
+ *                         lembretesMaisProximos:
+ *                           type: integer
+ *                           example: 3
+ *                           description: Quantidade de lembretes para os próximos 3 dias
+ *                         percentualPorTipo:
+ *                           type: object
+ *                           properties:
+ *                             contasPagar:
+ *                               type: number
+ *                               example: 33.33
+ *                             saude:
+ *                               type: number
+ *                               example: 20
+ *                             normal:
+ *                               type: number
+ *                               example: 46.67
+ *       401:
+ *         description: Não autorizado
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.get('/resumo', auth, async (req, res, next) => {
+  try {
+    const userId = req.user.userId;
+    const hoje = new Date();
+    
+    // Função auxiliar para calcular próxima execução
+    const calcularProximaExecucao = (lembrete) => {
+      if (!lembrete) return null;
+      
+      let proximaExecucao = null;
+      if (lembrete.recorrente && lembrete.hora) {
+        const horaMinuto = lembrete.hora.split(':');
+        
+        switch (lembrete.frequencia) {
+          case 'Diária':
+            proximaExecucao = new Date(hoje.setHours(horaMinuto[0], horaMinuto[1], 0, 0));
+            if (proximaExecucao < new Date()) {
+              proximaExecucao.setDate(proximaExecucao.getDate() + 1);
+            }
+            break;
+          
+          case 'Semanal':
+            const diasSemana = {
+              'Domingo': 0, 'Segunda': 1, 'Terça': 2, 'Quarta': 3,
+              'Quinta': 4, 'Sexta': 5, 'Sábado': 6
+            };
+            proximaExecucao = new Date(hoje.setHours(horaMinuto[0], horaMinuto[1], 0, 0));
+            while (proximaExecucao.getDay() !== diasSemana[lembrete.dia_semana]) {
+              proximaExecucao.setDate(proximaExecucao.getDate() + 1);
+            }
+            break;
+          
+          case 'Mensal':
+            proximaExecucao = new Date(hoje.getFullYear(), hoje.getMonth(), lembrete.dia);
+            proximaExecucao.setHours(horaMinuto[0], horaMinuto[1], 0, 0);
+            if (proximaExecucao < new Date()) {
+              proximaExecucao.setMonth(proximaExecucao.getMonth() + 1);
+            }
+            break;
+          
+          case 'Anual':
+            const meses = {
+              'Janeiro': 0, 'Fevereiro': 1, 'Março': 2, 'Abril': 3,
+              'Maio': 4, 'Junho': 5, 'Julho': 6, 'Agosto': 7,
+              'Setembro': 8, 'Outubro': 9, 'Novembro': 10, 'Dezembro': 11
+            };
+            proximaExecucao = new Date(hoje.getFullYear(), meses[lembrete.mes], lembrete.dia);
+            proximaExecucao.setHours(horaMinuto[0], horaMinuto[1], 0, 0);
+            if (proximaExecucao < new Date()) {
+              proximaExecucao.setFullYear(proximaExecucao.getFullYear() + 1);
+            }
+            break;
+        }
+      } else if (lembrete.data_hora) {
+        proximaExecucao = new Date(lembrete.data_hora);
+      }
+      
+      return proximaExecucao;
+    };
+
+    // Buscar próximo lembrete de cada tipo
+    const [proximosLembretes] = await pool.execute(`
+      SELECT l.*
+      FROM lembretes l
+      WHERE l.usuario_id = ? 
+        AND l.status = 'Ativo'
+      ORDER BY 
+        CASE 
+          WHEN l.data_hora IS NOT NULL THEN l.data_hora
+          ELSE DATE_ADD(CURDATE(), INTERVAL 1 YEAR)
+        END ASC,
+        l.tipo,
+        l.dia ASC,
+        l.hora ASC
+    `, [userId]);
+
+    // Agrupar por tipo e pegar o primeiro de cada
+    const proximosPorTipo = {};
+    proximosLembretes.forEach(lembrete => {
+      const tipoKey = lembrete.tipo.toLowerCase().replace(/\s+/g, '');
+      if (!proximosPorTipo[tipoKey]) {
+        const proximaExecucao = calcularProximaExecucao(lembrete);
+        if (proximaExecucao) {
+          proximosPorTipo[tipoKey] = {
+            id: lembrete.id,
+            titulo: lembrete.titulo,
+            proximaExecucao: proximaExecucao.toISOString()
+          };
+        }
+      }
+    });
+
+    // Buscar contagens
+    const [contagemTotal] = await pool.execute(
+      'SELECT COUNT(*) as total FROM lembretes WHERE usuario_id = ?',
+      [userId]
+    );
+    
+    const [contagemAtivos] = await pool.execute(
+      'SELECT COUNT(*) as ativos FROM lembretes WHERE usuario_id = ? AND status = "Ativo"',
+      [userId]
+    );
+    
+    const [contagemPorTipo] = await pool.execute(
+      'SELECT tipo, COUNT(*) as count FROM lembretes WHERE usuario_id = ? GROUP BY tipo',
+      [userId]
+    );
+    
+    const [contagemPorFrequencia] = await pool.execute(`
+      SELECT 
+        CASE 
+          WHEN recorrente = 0 THEN 'unico'
+          ELSE LOWER(frequencia)
+        END as freq,
+        COUNT(*) as count
+      FROM lembretes 
+      WHERE usuario_id = ?
+      GROUP BY freq
+    `, [userId]);
+
+    // Buscar próximos a vencer (próximos 3 dias)
+    const tresDiasDepois = new Date(hoje);
+    tresDiasDepois.setDate(tresDiasDepois.getDate() + 3);
+
+    const [proximosVencer] = await pool.execute(`
+      SELECT id, titulo, tipo, data_hora
+      FROM lembretes
+      WHERE usuario_id = ?
+        AND status = 'Ativo'
+        AND data_hora BETWEEN ? AND ?
+      ORDER BY data_hora ASC
+      LIMIT 5
+    `, [userId, hoje.toISOString(), tresDiasDepois.toISOString()]);
+
+    // Calcular estatísticas
+    const total = contagemTotal[0].total;
+    const percentuais = {};
+    contagemPorTipo.forEach(item => {
+      const tipoKey = item.tipo.toLowerCase().replace(/\s+/g, '');
+      percentuais[tipoKey] = parseFloat(((item.count / total) * 100).toFixed(2));
+    });
+
+    // Montar resposta
+    const responseData = {
+      proximosLembretes: proximosPorTipo,
+      contagens: {
+        total: contagemTotal[0].total,
+        ativos: contagemAtivos[0].ativos,
+        vencidos: proximosLembretes.filter(l => 
+          l.data_hora && new Date(l.data_hora) < hoje
+        ).length,
+        porTipo: contagemPorTipo.reduce((acc, item) => {
+          const tipoKey = item.tipo.toLowerCase().replace(/\s+/g, '');
+          acc[tipoKey] = item.count;
+          return acc;
+        }, {}),
+        porFrequencia: contagemPorFrequencia.reduce((acc, item) => {
+          acc[item.freq] = item.count;
+          return acc;
+        }, {})
+      },
+      proximosVencer: proximosVencer.map(l => ({
+        id: l.id,
+        titulo: l.titulo,
+        tipo: l.tipo,
+        proximaExecucao: l.data_hora
+      })),
+      estatisticas: {
+        lembretesMaisProximos: proximosVencer.length,
+        percentualPorTipo: percentuais
+      }
+    };
+
+    res.json(
+      successResponse(
+        HttpStatus.OK,
+        'Resumo obtido com sucesso',
+        responseData
+      )
+    );
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * @swagger
  * /api/lembretes/{id}:
  *   put:
  *     tags: [Lembretes]
