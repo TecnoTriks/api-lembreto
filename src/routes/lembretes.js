@@ -386,9 +386,12 @@ router.post('/', auth, async (req, res, next) => {
  *     tags: [Lembretes]
  *     summary: Lista todos os lembretes do usuário
  *     description: |
- *       Retorna todos os lembretes do usuário autenticado.
- *       É possível filtrar por tipo e status.
- *       Os lembretes são retornados com todos os detalhes, incluindo informações de recorrência.
+ *       Retorna todos os lembretes do usuário autenticado com opções de filtro.
+ *       Também retorna metadados úteis para construir interfaces de filtro:
+ *       - Contagem total de lembretes
+ *       - Tipos disponíveis com contagem
+ *       - Status disponíveis com contagem
+ *       - Distribuição por frequência
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -397,16 +400,27 @@ router.post('/', auth, async (req, res, next) => {
  *         schema:
  *           type: string
  *           enum: [Contas a Pagar, Saúde, Normal]
- *         description: Filtrar por tipo de lembrete
+ *         description: Filtrar por tipo de lembrete (opcional)
  *       - in: query
  *         name: status
  *         schema:
  *           type: string
  *           enum: [Ativo, Concluído, Cancelado]
- *         description: Filtrar por status do lembrete
+ *         description: Filtrar por status do lembrete (opcional)
+ *       - in: query
+ *         name: recorrente
+ *         schema:
+ *           type: boolean
+ *         description: Filtrar apenas lembretes recorrentes ou não recorrentes (opcional)
+ *       - in: query
+ *         name: frequencia
+ *         schema:
+ *           type: string
+ *           enum: [Diária, Semanal, Mensal, Anual]
+ *         description: Filtrar por frequência (opcional)
  *     responses:
  *       200:
- *         description: Lista de lembretes retornada com sucesso
+ *         description: Lista de lembretes e metadados retornados com sucesso
  *         content:
  *           application/json:
  *             schema:
@@ -419,94 +433,106 @@ router.post('/', auth, async (req, res, next) => {
  *                   type: string
  *                   example: "Lembretes listados com sucesso"
  *                 data:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       id:
- *                         type: integer
- *                         example: 1
- *                       titulo:
- *                         type: string
- *                         example: "Consulta médica"
- *                       descricao:
- *                         type: string
- *                         example: "Consulta de rotina com Dr. João"
- *                       tipo:
- *                         type: string
- *                         enum: [Contas a Pagar, Saúde, Normal]
- *                         example: "Saúde"
- *                       data_hora:
- *                         type: string
- *                         format: date-time
- *                         example: "2024-12-25T10:00:00"
- *                         nullable: true
- *                       recorrente:
- *                         type: boolean
- *                         example: true
- *                       frequencia:
- *                         type: string
- *                         enum: [Diária, Semanal, Mensal, Anual]
- *                         example: "Mensal"
- *                         nullable: true
- *                       status:
- *                         type: string
- *                         enum: [Ativo, Concluído, Cancelado]
- *                         example: "Ativo"
- *                       dia:
- *                         type: integer
- *                         example: 15
- *                         nullable: true
- *                       hora:
- *                         type: string
- *                         format: time
- *                         example: "14:30"
- *                         nullable: true
- *                       data:
- *                         type: string
- *                         format: date
- *                         example: "2024-12-25"
- *                         nullable: true
- *                       dia_semana:
- *                         type: string
- *                         enum: [Domingo, Segunda, Terça, Quarta, Quinta, Sexta, Sábado]
- *                         example: "Segunda"
- *                         nullable: true
- *                       mes:
- *                         type: string
- *                         enum: [Janeiro, Fevereiro, Março, Abril, Maio, Junho, Julho, Agosto, Setembro, Outubro, Novembro, Dezembro]
- *                         example: "Dezembro"
- *                         nullable: true
- *                       proxima_execucao:
- *                         type: string
- *                         format: date-time
- *                         example: "2024-12-25T10:00:00"
- *                         nullable: true
- *                         description: Data e hora da próxima execução do lembrete
- *       401:
- *         description: Não autorizado
- *       500:
- *         description: Erro interno do servidor
+ *                   type: object
+ *                   properties:
+ *                     lembretes:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Lembrete'
+ *                     metadata:
+ *                       type: object
+ *                       properties:
+ *                         total:
+ *                           type: integer
+ *                           example: 10
+ *                         tipos:
+ *                           type: array
+ *                           items:
+ *                             type: object
+ *                             properties:
+ *                               tipo:
+ *                                 type: string
+ *                                 example: "Saúde"
+ *                               count:
+ *                                 type: integer
+ *                                 example: 3
+ *                         status:
+ *                           type: array
+ *                           items:
+ *                             type: object
+ *                             properties:
+ *                               status:
+ *                                 type: string
+ *                                 example: "Ativo"
+ *                               count:
+ *                                 type: integer
+ *                                 example: 5
+ *                         frequencias:
+ *                           type: array
+ *                           items:
+ *                             type: object
+ *                             properties:
+ *                               frequencia:
+ *                                 type: string
+ *                                 example: "Mensal"
+ *                               count:
+ *                                 type: integer
+ *                                 example: 4
+ *                         recorrentes:
+ *                           type: object
+ *                           properties:
+ *                             sim:
+ *                               type: integer
+ *                               example: 6
+ *                             nao:
+ *                               type: integer
+ *                               example: 4
  */
 router.get('/', auth, async (req, res, next) => {
   try {
-    const { tipo, status } = req.query;
-    let query = 'SELECT * FROM lembretes WHERE usuario_id = ?';
-    const params = [req.user.userId];
+    const { tipo, status, recorrente, frequencia } = req.query;
+    let conditions = ['usuario_id = ?'];
+    let params = [req.user.userId];
     
     if (tipo) {
-      query += ' AND tipo = ?';
+      conditions.push('tipo = ?');
       params.push(tipo);
     }
-
     if (status) {
-      query += ' AND status = ?';
+      conditions.push('status = ?');
       params.push(status);
     }
-    
-    query += ' ORDER BY data_hora ASC, dia ASC, hora ASC';
+    if (recorrente !== undefined) {
+      conditions.push('recorrente = ?');
+      params.push(recorrente === 'true');
+    }
+    if (frequencia) {
+      conditions.push('frequencia = ?');
+      params.push(frequencia);
+    }
 
+    // Query principal para lembretes
+    const query = `SELECT * FROM lembretes WHERE ${conditions.join(' AND ')} ORDER BY data_hora ASC, dia ASC, hora ASC`;
     const [lembretes] = await pool.execute(query, params);
+
+    // Queries para metadados
+    const userId = req.user.userId;
+    const [tiposCount] = await pool.execute(
+      'SELECT tipo, COUNT(*) as count FROM lembretes WHERE usuario_id = ? GROUP BY tipo',
+      [userId]
+    );
+    const [statusCount] = await pool.execute(
+      'SELECT status, COUNT(*) as count FROM lembretes WHERE usuario_id = ? GROUP BY status',
+      [userId]
+    );
+    const [frequenciasCount] = await pool.execute(
+      'SELECT frequencia, COUNT(*) as count FROM lembretes WHERE usuario_id = ? AND frequencia IS NOT NULL GROUP BY frequencia',
+      [userId]
+    );
+    const [recorrentesCount] = await pool.execute(
+      'SELECT recorrente, COUNT(*) as count FROM lembretes WHERE usuario_id = ? GROUP BY recorrente',
+      [userId]
+    );
 
     // Processa os lembretes para adicionar a próxima execução
     const lembretesProcessados = lembretes.map(lembrete => {
@@ -566,11 +592,26 @@ router.get('/', auth, async (req, res, next) => {
       };
     });
 
+    // Monta o objeto de resposta com lembretes e metadados
+    const responseData = {
+      lembretes: lembretesProcessados,
+      metadata: {
+        total: lembretes.length,
+        tipos: tiposCount.map(t => ({ tipo: t.tipo, count: t.count })),
+        status: statusCount.map(s => ({ status: s.status, count: s.count })),
+        frequencias: frequenciasCount.map(f => ({ frequencia: f.frequencia, count: f.count })),
+        recorrentes: {
+          sim: recorrentesCount.find(r => r.recorrente === 1)?.count || 0,
+          nao: recorrentesCount.find(r => r.recorrente === 0)?.count || 0
+        }
+      }
+    };
+
     res.json(
       successResponse(
         HttpStatus.OK,
         'Lembretes listados com sucesso',
-        lembretesProcessados
+        responseData
       )
     );
   } catch (error) {
