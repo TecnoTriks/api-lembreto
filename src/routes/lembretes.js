@@ -385,6 +385,10 @@ router.post('/', auth, async (req, res, next) => {
  *   get:
  *     tags: [Lembretes]
  *     summary: Lista todos os lembretes do usuário
+ *     description: |
+ *       Retorna todos os lembretes do usuário autenticado.
+ *       É possível filtrar por tipo e status.
+ *       Os lembretes são retornados com todos os detalhes, incluindo informações de recorrência.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -392,14 +396,101 @@ router.post('/', auth, async (req, res, next) => {
  *         name: tipo
  *         schema:
  *           type: string
+ *           enum: [Contas a Pagar, Saúde, Normal]
  *         description: Filtrar por tipo de lembrete
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [Ativo, Concluído, Cancelado]
+ *         description: Filtrar por status do lembrete
  *     responses:
  *       200:
  *         description: Lista de lembretes retornada com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: integer
+ *                   example: 200
+ *                 message:
+ *                   type: string
+ *                   example: "Lembretes listados com sucesso"
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                         example: 1
+ *                       titulo:
+ *                         type: string
+ *                         example: "Consulta médica"
+ *                       descricao:
+ *                         type: string
+ *                         example: "Consulta de rotina com Dr. João"
+ *                       tipo:
+ *                         type: string
+ *                         enum: [Contas a Pagar, Saúde, Normal]
+ *                         example: "Saúde"
+ *                       data_hora:
+ *                         type: string
+ *                         format: date-time
+ *                         example: "2024-12-25T10:00:00"
+ *                         nullable: true
+ *                       recorrente:
+ *                         type: boolean
+ *                         example: true
+ *                       frequencia:
+ *                         type: string
+ *                         enum: [Diária, Semanal, Mensal, Anual]
+ *                         example: "Mensal"
+ *                         nullable: true
+ *                       status:
+ *                         type: string
+ *                         enum: [Ativo, Concluído, Cancelado]
+ *                         example: "Ativo"
+ *                       dia:
+ *                         type: integer
+ *                         example: 15
+ *                         nullable: true
+ *                       hora:
+ *                         type: string
+ *                         format: time
+ *                         example: "14:30"
+ *                         nullable: true
+ *                       data:
+ *                         type: string
+ *                         format: date
+ *                         example: "2024-12-25"
+ *                         nullable: true
+ *                       dia_semana:
+ *                         type: string
+ *                         enum: [Domingo, Segunda, Terça, Quarta, Quinta, Sexta, Sábado]
+ *                         example: "Segunda"
+ *                         nullable: true
+ *                       mes:
+ *                         type: string
+ *                         enum: [Janeiro, Fevereiro, Março, Abril, Maio, Junho, Julho, Agosto, Setembro, Outubro, Novembro, Dezembro]
+ *                         example: "Dezembro"
+ *                         nullable: true
+ *                       proxima_execucao:
+ *                         type: string
+ *                         format: date-time
+ *                         example: "2024-12-25T10:00:00"
+ *                         nullable: true
+ *                         description: Data e hora da próxima execução do lembrete
+ *       401:
+ *         description: Não autorizado
+ *       500:
+ *         description: Erro interno do servidor
  */
 router.get('/', auth, async (req, res, next) => {
   try {
-    const { tipo } = req.query;
+    const { tipo, status } = req.query;
     let query = 'SELECT * FROM lembretes WHERE usuario_id = ?';
     const params = [req.user.userId];
     
@@ -407,13 +498,79 @@ router.get('/', auth, async (req, res, next) => {
       query += ' AND tipo = ?';
       params.push(tipo);
     }
+
+    if (status) {
+      query += ' AND status = ?';
+      params.push(status);
+    }
     
+    query += ' ORDER BY data_hora ASC, dia ASC, hora ASC';
+
     const [lembretes] = await pool.execute(query, params);
+
+    // Processa os lembretes para adicionar a próxima execução
+    const lembretesProcessados = lembretes.map(lembrete => {
+      let proximaExecucao = null;
+
+      if (lembrete.recorrente && lembrete.hora) {
+        const hoje = new Date();
+        const horaMinuto = lembrete.hora.split(':');
+        
+        switch (lembrete.frequencia) {
+          case 'Diária':
+            proximaExecucao = new Date(hoje.setHours(horaMinuto[0], horaMinuto[1], 0, 0));
+            if (proximaExecucao < new Date()) {
+              proximaExecucao.setDate(proximaExecucao.getDate() + 1);
+            }
+            break;
+          
+          case 'Semanal':
+            const diasSemana = {
+              'Domingo': 0, 'Segunda': 1, 'Terça': 2, 'Quarta': 3,
+              'Quinta': 4, 'Sexta': 5, 'Sábado': 6
+            };
+            proximaExecucao = new Date(hoje.setHours(horaMinuto[0], horaMinuto[1], 0, 0));
+            while (proximaExecucao.getDay() !== diasSemana[lembrete.dia_semana]) {
+              proximaExecucao.setDate(proximaExecucao.getDate() + 1);
+            }
+            break;
+          
+          case 'Mensal':
+            proximaExecucao = new Date(hoje.getFullYear(), hoje.getMonth(), lembrete.dia);
+            proximaExecucao.setHours(horaMinuto[0], horaMinuto[1], 0, 0);
+            if (proximaExecucao < new Date()) {
+              proximaExecucao.setMonth(proximaExecucao.getMonth() + 1);
+            }
+            break;
+          
+          case 'Anual':
+            const meses = {
+              'Janeiro': 0, 'Fevereiro': 1, 'Março': 2, 'Abril': 3,
+              'Maio': 4, 'Junho': 5, 'Julho': 6, 'Agosto': 7,
+              'Setembro': 8, 'Outubro': 9, 'Novembro': 10, 'Dezembro': 11
+            };
+            proximaExecucao = new Date(hoje.getFullYear(), meses[lembrete.mes], lembrete.dia);
+            proximaExecucao.setHours(horaMinuto[0], horaMinuto[1], 0, 0);
+            if (proximaExecucao < new Date()) {
+              proximaExecucao.setFullYear(proximaExecucao.getFullYear() + 1);
+            }
+            break;
+        }
+      } else if (lembrete.data_hora) {
+        proximaExecucao = new Date(lembrete.data_hora);
+      }
+
+      return {
+        ...lembrete,
+        proxima_execucao: proximaExecucao ? proximaExecucao.toISOString() : null
+      };
+    });
+
     res.json(
       successResponse(
         HttpStatus.OK,
-        'Lembretes recuperados com sucesso',
-        lembretes
+        'Lembretes listados com sucesso',
+        lembretesProcessados
       )
     );
   } catch (error) {
