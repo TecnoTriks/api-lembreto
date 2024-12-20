@@ -272,12 +272,13 @@ router.post('/login', async (req, res, next) => {
  * /api/usuarios/perfil:
  *   get:
  *     tags: [Usuários]
- *     summary: Retorna o perfil do usuário
+ *     summary: Retorna o perfil do usuário autenticado
+ *     description: Retorna todas as informações do perfil do usuário logado, exceto dados sensíveis como senha e api_key
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Perfil retornado com sucesso
+ *         description: Perfil recuperado com sucesso
  *         content:
  *           application/json:
  *             schema:
@@ -295,31 +296,46 @@ router.post('/login', async (req, res, next) => {
  *                     id:
  *                       type: integer
  *                       example: 1
+ *                       description: "ID do usuário"
  *                     nome:
  *                       type: string
  *                       example: "João Silva"
+ *                       description: "Nome completo do usuário"
  *                     email:
  *                       type: string
  *                       example: "joao@email.com"
+ *                       description: "Email do usuário"
  *                     telefone:
  *                       type: string
  *                       example: "63984193411"
- *                     data_criacao:
+ *                       description: "Número de telefone do usuário"
+ *                     foto_perfil:
  *                       type: string
- *                       example: "2022-01-01T00:00:00.000Z"
+ *                       nullable: true
+ *                       example: "https://exemplo.com/foto.jpg"
+ *                       description: "URL da foto de perfil do usuário"
+ *                     onboarding:
+ *                       type: boolean
+ *                       example: true
+ *                       description: "Status do onboarding do usuário"
  *                     status:
  *                       type: string
  *                       example: "ativo"
- *                     api_key:
+ *                       description: "Status da conta do usuário"
+ *                     data_criacao:
  *                       type: string
- *                       example: "a1b2c3d4..."
+ *                       format: date-time
+ *                       example: "2024-01-01T00:00:00.000Z"
+ *                       description: "Data de criação da conta"
+ *       401:
+ *         description: Não autorizado - Token inválido ou expirado
  *       404:
  *         description: Usuário não encontrado
  */
 router.get('/perfil', auth, async (req, res, next) => {
   try {
     const [users] = await pool.execute(
-      'SELECT id, nome, email, telefone, data_criacao, status, api_key FROM usuarios WHERE id = ?',
+      'SELECT id, nome, email, telefone, foto_perfil, onboarding, status, data_criacao FROM usuarios WHERE id = ?',
       [req.user.userId]
     );
 
