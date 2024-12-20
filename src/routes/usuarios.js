@@ -184,11 +184,28 @@ router.post('/registro', async (req, res, next) => {
  *                     token:
  *                       type: string
  *                       example: "eyJhbGciOiJ..."
+ *                       description: "Token JWT para autenticação"
  *                     api_key:
  *                       type: string
  *                       example: "a1b2c3d4..."
+ *                       description: "Chave API do usuário"
+ *                     nome:
+ *                       type: string
+ *                       example: "João Silva"
+ *                       description: "Nome completo do usuário"
+ *                     foto_perfil:
+ *                       type: string
+ *                       nullable: true
+ *                       example: "https://exemplo.com/foto.jpg"
+ *                       description: "URL da foto de perfil do usuário"
+ *                     onboarding:
+ *                       type: boolean
+ *                       example: true
+ *                       description: "Status do onboarding do usuário"
  *       401:
  *         description: Credenciais inválidas
+ *       400:
+ *         description: Dados inválidos ou ausentes
  */
 router.post('/login', async (req, res, next) => {
   try {
@@ -202,22 +219,21 @@ router.post('/login', async (req, res, next) => {
       );
     }
 
-    // Remove todos os caracteres não numéricos do telefone
     const telefoneNumerico = telefone.replace(/\D/g, '');
 
-    const [rows] = await pool.execute(
-      'SELECT id, nome, email, senha, api_key, telefone FROM usuarios WHERE telefone = ?',
+    const [users] = await pool.execute(
+      'SELECT id, nome, senha, api_key, foto_perfil, onboarding FROM usuarios WHERE telefone = ?',
       [telefoneNumerico]
     );
 
-    if (rows.length === 0) {
+    if (users.length === 0) {
       throw new AppError(
         HttpStatus.UNAUTHORIZED,
         'Credenciais inválidas'
       );
     }
 
-    const user = rows[0];
+    const user = users[0];
     const senhaValida = await bcrypt.compare(senha, user.senha);
 
     if (!senhaValida) {
@@ -236,10 +252,13 @@ router.post('/login', async (req, res, next) => {
     res.json(
       successResponse(
         HttpStatus.OK,
-        'Login realizado com sucesso',
-        { 
+        ApiMessages.LOGIN_SUCCESS,
+        {
           token,
-          api_key: user.api_key
+          api_key: user.api_key,
+          nome: user.nome,
+          foto_perfil: user.foto_perfil || null,
+          onboarding: user.onboarding ? true : false
         }
       )
     );
@@ -366,6 +385,200 @@ router.post('/regenerar-api-key', auth, async (req, res, next) => {
         HttpStatus.OK,
         'API Key regenerada com sucesso',
         { api_key: newApiKey }
+      )
+    );
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * @swagger
+ * /api/usuarios:
+ *   put:
+ *     tags: [Usuários]
+ *     summary: Atualiza informações do usuário
+ *     description: Atualiza os dados do perfil do usuário autenticado. Todos os campos são opcionais, apenas os campos enviados serão atualizados.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               nome:
+ *                 type: string
+ *                 example: "João Silva"
+ *                 description: "Nome completo do usuário"
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 example: "joao@email.com"
+ *                 description: "Email do usuário (deve ser único)"
+ *               foto_perfil:
+ *                 type: string
+ *                 example: "https://exemplo.com/foto.jpg"
+ *                 description: "URL da foto de perfil"
+ *                 nullable: true
+ *               onboarding:
+ *                 type: boolean
+ *                 example: true
+ *                 description: "Status do onboarding do usuário"
+ *               status:
+ *                 type: string
+ *                 enum: [ativo, inativo]
+ *                 example: "ativo"
+ *                 description: "Status da conta do usuário"
+ *     responses:
+ *       200:
+ *         description: Usuário atualizado com sucesso
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: integer
+ *                   example: 200
+ *                 message:
+ *                   type: string
+ *                   example: "Usuário atualizado com sucesso"
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                       example: 1
+ *                     nome:
+ *                       type: string
+ *                       example: "João Silva"
+ *                     email:
+ *                       type: string
+ *                       example: "joao@email.com"
+ *                     telefone:
+ *                       type: string
+ *                       example: "63984193411"
+ *                     foto_perfil:
+ *                       type: string
+ *                       nullable: true
+ *                       example: "https://exemplo.com/foto.jpg"
+ *                     onboarding:
+ *                       type: boolean
+ *                       example: true
+ *                     status:
+ *                       type: string
+ *                       example: "ativo"
+ *                     data_criacao:
+ *                       type: string
+ *                       format: date-time
+ *                       example: "2024-01-01T00:00:00.000Z"
+ *       400:
+ *         description: Dados inválidos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: integer
+ *                   example: 400
+ *                 message:
+ *                   type: string
+ *                   example: "Dados inválidos"
+ *                 error:
+ *                   type: object
+ *                   properties:
+ *                     message:
+ *                       type: string
+ *                       example: "Status inválido. Use 'ativo' ou 'inativo'"
+ *       401:
+ *         description: Não autorizado - Token inválido ou expirado
+ *       404:
+ *         description: Usuário não encontrado
+ *       409:
+ *         description: Conflito - Email já está em uso
+ */
+router.put('/', auth, async (req, res, next) => {
+  try {
+    const { nome, email, foto_perfil, onboarding, status } = req.body;
+    const updateFields = [];
+    const values = [];
+
+    // Validar email se fornecido
+    if (email) {
+      // Verificar se o email já está em uso por outro usuário
+      const [existingUser] = await pool.execute(
+        'SELECT id FROM usuarios WHERE email = ? AND id != ?',
+        [email, req.user.userId]
+      );
+
+      if (existingUser.length > 0) {
+        throw new AppError(
+          HttpStatus.CONFLICT,
+          'Email já está em uso'
+        );
+      }
+      updateFields.push('email = ?');
+      values.push(email);
+    }
+
+    if (nome) {
+      updateFields.push('nome = ?');
+      values.push(nome);
+    }
+
+    if (foto_perfil !== undefined) {
+      updateFields.push('foto_perfil = ?');
+      values.push(foto_perfil);
+    }
+
+    if (onboarding !== undefined) {
+      updateFields.push('onboarding = ?');
+      values.push(onboarding);
+    }
+
+    if (status) {
+      if (!['ativo', 'inativo'].includes(status)) {
+        throw new AppError(
+          HttpStatus.BAD_REQUEST,
+          'Status inválido. Use "ativo" ou "inativo"'
+        );
+      }
+      updateFields.push('status = ?');
+      values.push(status);
+    }
+
+    if (updateFields.length === 0) {
+      throw new AppError(
+        HttpStatus.BAD_REQUEST,
+        'Nenhum campo para atualizar foi fornecido'
+      );
+    }
+
+    // Adiciona o ID do usuário para a cláusula WHERE
+    values.push(req.user.userId);
+
+    const query = `
+      UPDATE usuarios 
+      SET ${updateFields.join(', ')}
+      WHERE id = ?
+    `;
+
+    await pool.execute(query, values);
+
+    // Buscar dados atualizados do usuário
+    const [updatedUser] = await pool.execute(
+      'SELECT id, nome, email, telefone, foto_perfil, onboarding, status, data_criacao FROM usuarios WHERE id = ?',
+      [req.user.userId]
+    );
+
+    res.json(
+      successResponse(
+        HttpStatus.OK,
+        'Usuário atualizado com sucesso',
+        updatedUser[0]
       )
     );
   } catch (error) {
